@@ -1,0 +1,1 @@
+    card_keys: (document.getElementById("pfCardKeys").value.trim() || "").split("\n").filter(function(k){ return k.trim(); }),

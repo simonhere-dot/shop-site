@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>订单支付</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; background: #f5f5f5; color: #333; min-height: 100vh; }
+.pay-header { background: #fff; border-bottom: 1px solid #e8e8e8; padding: 0 16px; display: flex; align-items: center; justify-content: center; height: 48px; position: sticky; top: 0; z-index: 10; }
+.pay-header .back-btn { position: absolute; left: 16px; background: none; border: none; font-size: 20px; cursor: pointer; color: #333; font-family: inherit; }
+.pay-header h2 { font-size: 16px; font-weight: 600; }
+.pay-container { max-width: 480px; margin: 0 auto; padding: 12px 16px 40px; }
+.card { background: #fff; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); overflow: hidden; }
+.countdown-bar { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; font-size: 15px; font-weight: 600; }
+.countdown-bar.warning { background: #fff7e6; color: #d46b08; border-bottom: 1px solid #ffd591; }
+.countdown-bar.danger { background: #fff1f0; color: #cf1322; border-bottom: 1px solid #ffa39e; }
+.order-info { padding: 16px 20px; }
+.order-info .otitle { font-size: 14px; color: #999; margin-bottom: 12px; }
+.order-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f5f5f5; font-size: 14px; }
+.order-row .label { color: #666; }
+.order-row .val { font-weight: 500; text-align: right; max-width: 60%; }
+.order-id { font-size: 12px; color: #bbb; font-family: monospace; }
+.amount-row { display: flex; justify-content: space-between; padding: 16px 0 0; margin-top: 12px; border-top: 1px solid #eee; }
+.amount-label { font-size: 15px; font-weight: 600; }
+.amount-value { font-size: 26px; font-weight: 700; color: #e4393c; }
+.pay-method { padding: 16px 20px; }
+.pay-method .stitle { font-size: 14px; color: #999; margin-bottom: 12px; }
+.method-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 2px solid #1677ff; border-radius: 10px; background: #f0f7ff; }
+.method-icon { width: 40px; height: 40px; border-radius: 8px; background: #1677ff; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; font-weight: 700; flex-shrink: 0; }
+.method-name { font-weight: 600; font-size: 15px; }
+.method-check { margin-left: auto; color: #1677ff; font-size: 18px; }
+.qr-section { padding: 0 20px 20px; text-align: center; }
+.qr-box { width: 200px; height: 200px; margin: 0 auto; background: #fafafa; border: 1px solid #e8e8e8; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.qr-box img { max-width: 100%; max-height: 100%; }
+.qr-placeholder { text-align: center; color: #bbb; font-size: 13px; padding: 20px; }
+.qr-hint { font-size: 13px; color: #999; margin-top: 12px; }
+.steps { padding: 20px; }
+.steps .step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; font-size: 14px; }
+.step-num { width: 22px; height: 22px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #666; flex-shrink: 0; margin-top: 1px; }
+.btn-wrap { padding: 4px 20px 20px; }
+.btn-confirm { width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 17px; font-weight: 600; cursor: pointer; font-family: inherit; background: #1677ff; color: #fff; }
+.btn-confirm:disabled { background: #d9d9d9; color: #999; cursor: not-allowed; }
+.btn-outline { width: 100%; padding: 14px; border: 1px solid #d9d9d9; border-radius: 10px; font-size: 15px; font-weight: 500; cursor: pointer; font-family: inherit; background: #fff; color: #666; margin-top: 8px; }
+.expired-section { padding: 40px 20px; text-align: center; display: none; }
+.expired-section h3 { font-size: 18px; color: #e4393c; margin-bottom: 8px; }
+.expired-section p { color: #999; font-size: 14px; }
+.toast { position: fixed; top: 20px; right: 20px; z-index: 999; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.toast-success { background: #52c41a; color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="pay-header">
+  <button class="back-btn" onclick="goBack()">←</button>
+  <h2>订单支付</h2>
+</div>
+
+<div class="pay-container">
+  <div class="card">
+    <div class="countdown-bar warning" id="countdownBar">
+      <span>⏰</span><span>剩余支付时间：</span><span id="timerDisplay">加载中...</span>
+    </div>
+    <div class="order-info">
+      <div class="otitle">订单信息</div>
+      <div class="order-id" id="orderIdDisplay">-</div>
+      <div class="order-row"><span class="label">商品</span><span class="val" id="elProduct">-</span></div>
+      <div class="order-row" id="elSpecRow" style="display:none"><span class="label">规格</span><span class="val" id="elSpecs">-</span></div>
+      <div class="order-row"><span class="label">方案</span><span class="val" id="elPriceLabel">-</span></div>
+      <div class="order-row"><span class="label">数量</span><span class="val" id="elQty">1</span></div>
+      <div class="amount-row"><span class="amount-label">应付金额</span><span class="amount-value" id="elTotal">¥0</span></div>
+    </div>
+    <div class="pay-method">
+      <div class="stitle">支付方式</div>
+      <div class="method-item"><div class="method-icon">支</div><span class="method-name">支付宝</span><span class="method-check">✓</span></div>
+    </div>
+    <div class="qr-section" id="qrSection">
+      <div class="qr-box" id="qrBox"><div class="qr-placeholder">请在管理后台上传支付宝收款码</div></div>
+    </div>
+    <div class="expired-section" id="expiredSection"><h3>订单已超时</h3><p>请返回重新下单</p></div>
+  </div>
+  <div class="card"><div class="steps">
+    <div class="step"><span class="step-num">1</span>打开<b>支付宝</b>App，扫描上方二维码</div>
+    <div class="step"><span class="step-num">2</span>确认金额，输入支付密码完成付款</div>
+    <div class="step"><span class="step-num">3</span>付款后点击下方<b>「已完成付款」</b>按钮</div>
+  </div></div>
+  <div class="btn-wrap">
+    <button class="btn-confirm" id="btnPaid" onclick="confirmPaid()">我已扫码并完成付款</button>
+    <button class="btn-outline" onclick="goBack()">返回商品页</button>
+  </div>
+</div>
+
+<div id="toastContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var sb = supabase.createClient('https://kckcgxzrjnyhaqlaxcni.supabase.co','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtja2NneHpyam55aGFxbGF4Y25pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MzQ0NzksImV4cCI6MjA5NDIxMDQ3OX0.xL3fNKieQG-yZ1oCgK7jwBl8e1bIFcMsOJMp4tNw4zI');
+
+var orderId = new URLSearchParams(window.location.search).get('id');
+if (!orderId) { document.body.innerHTML = '<div style="text-align:center;padding:80px 20px;"><h2>订单号缺失</h2><a href="index.html">返回首页</a></div>'; }
+
+var expireTime = 0, totalPrice = 0, timerId = null;
+
+(async function init() {
+  // Load order with retry
+  for (var i = 0; i < 10; i++) {
+    var res = await sb.from('orders').select('*').eq('id', orderId).single();
+    if (res.data && res.data.total_price > 0) {
+      var o = res.data;
+      console.log('订单加载成功:', o.id, '金额:', o.total_price, '过期:', o.expire_at);
+
+      document.getElementById('orderIdDisplay').textContent = o.id;
+      document.getElementById('elProduct').textContent = o.product_name || '-';
+      var specChosen = o.spec_chosen || [];
+      var specText = Array.isArray(specChosen) ? specChosen.map(function(s){return s.name+': '+s.value;}).join('，') : '';
+      if (specText) { document.getElementById('elSpecRow').style.display = 'flex'; document.getElementById('elSpecs').textContent = specText; }
+      var priceChosen = o.price_chosen || {};
+      document.getElementById('elPriceLabel').textContent = (priceChosen.label||'') + ' × ' + (o.quantity||1);
+      document.getElementById('elQty').textContent = o.quantity || 1;
+      totalPrice = o.total_price || 0;
+      document.getElementById('elTotal').textContent = '¥' + totalPrice;
+
+      // Load QR
+      var sr = await sb.from('settings').select('*');
+      if (sr.data) { sr.data.forEach(function(r){ if(r.key==='site_config'&&r.value.alipayQr){ document.getElementById('qrBox').innerHTML = '<img src="'+r.value.alipayQr+'" alt="收款码">'; } }); }
+
+      expireTime = new Date(o.expire_at).getTime();
+      if (!isNaN(expireTime) && expireTime > 0) {
+        tickTimer();
+        timerId = setInterval(tickTimer, 1000);
+      }
+      return;
+    }
+    await new Promise(function(r){ setTimeout(r, 1000); });
+  }
+  document.getElementById('timerDisplay').textContent = '订单加载失败';
+})();
+
+function tickTimer() {
+  var remaining = Math.max(0, Math.floor((expireTime - Date.now()) / 1000));
+  var mins = Math.floor(remaining / 60);
+  var secs = remaining % 60;
+  var bar = document.getElementById('countdownBar');
+  var disp = document.getElementById('timerDisplay');
+
+  if (remaining <= 0) {
+    disp.textContent = '已超时';
+    bar.style.background = '#f5f5f5'; bar.style.color = '#bbb';
+    document.getElementById('qrSection').style.display = 'none';
+    document.getElementById('expiredSection').style.display = 'block';
+    document.getElementById('btnPaid').disabled = true;
+    document.getElementById('btnPaid').textContent = '订单已超时';
+    if (timerId) clearInterval(timerId);
+    return;
+  }
+
+  if (remaining < 60) { bar.className = 'countdown-bar danger'; }
+  else { bar.className = 'countdown-bar warning'; }
+  disp.textContent = String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
+}
+
+async function confirmPaid() {
+  if (!confirm("请确认已使用支付宝完成付款？")) return;
+  
+  var orderRes = await sb.from("orders").select("*").eq("id", orderId).single();
+  var order = orderRes.data;
+  if (!order) return;
+  
+  var cardKey = "";
+  var productRes = await sb.from("products").select("id,card_keys").eq("name", order.product_name).single();
+  if (productRes.data && productRes.data.card_keys && productRes.data.card_keys.length > 0) {
+    cardKey = productRes.data.card_keys.shift();
+    await sb.from("products").update({ card_keys: productRes.data.card_keys }).eq("id", productRes.data.id);
+  }
+  
+  await sb.from("orders").update({ status: "paid", card_key: cardKey }).eq("id", orderId);
+  
+  var t = document.createElement("div"); t.className = "toast toast-success";
+  t.textContent = cardKey ? "付款成功！卡密已生成" : "付款确认成功！";
+  document.body.appendChild(t);
+  setTimeout(function(){ window.location.href = "index.html?paid=" + orderId; }, 800);
+}
+
+function goBack() {
+  if (confirm('确定离开支付页面？未付款订单可在「我的订单」中继续支付。')) { window.location.href = 'index.html'; }
+}
+</script>
+</body>
+</html>
